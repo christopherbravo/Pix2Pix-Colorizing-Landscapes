@@ -80,10 +80,10 @@ class Model(tf.keras.Model):
             decoder_output = decoder_layer(curr_output)
             curr_output = tf.nn.Concatenate()([decoder_output,encoder_outputs[i]])
 
-        prob_real_given_real = self.discriminator(tf.nn.Concatenate()([original_images,curr_output])) # check what concatenating them like this does
-        prob_gen_given_gen = self.discriminator(tf.nn.Concatenate()([original_images,real_transformed_images]))
+        logit_real_given_real = self.discriminator(tf.nn.Concatenate()([original_images,curr_output])) # check what concatenating them like this does
+        logit_gen_given_gen = self.discriminator(tf.nn.Concatenate()([original_images,real_transformed_images]))
 
-        return gen_transformed_images,prob_real_given_real,prob_gen_given_gen
+        return gen_transformed_images,logit_real_given_real,logit_gen_given_gen
 
     def loss(self):
         pass
