@@ -2,9 +2,9 @@ import tensorflow as tf
 
 class Model(tf.keras.Model):
     def __init__(self,num_output_channels):
-        self.batch_size = 1
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
-        self.lambda = .01 # regularization
+        batch_size = 1
+        optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
+        lambda = .01 # regularization
 
 
         def create_layer_with_batch_norm_and_relu(num_filters,kernel_size,batch_norm=True,dropout=False,downsample=True):
@@ -18,51 +18,71 @@ class Model(tf.keras.Model):
 
             leaky_relu_layer = tf.keras.layers.LeakyReLU(0.2)
 
-            layer.add(conv_output_layer)
-            layer.add(batch_norm_layer)
+            layer.append(conv_output_layer)
+            layer.append(batch_norm_layer)
             if dropout:
-                layer.add(tf.keras.layers.Dropout(0.5))
-            layer.add(leaky_relu_layer)
+                layer.append(tf.keras.layers.Dropout(0.5))
+            layer.append(leaky_relu_layer)
 
             return layer
 
 
         ### TODO add skip connections (U Net). also modify decoder to be consistent with unet. section 6.1.1
-        self.encoder = tf.keras.Sequential()
-        self.encoder.add(create_layer_with_batch_norm_and_relu(64,4,batch_norm=False,dropout=False))
-        self.encoder.add(create_layer_with_batch_norm_and_relu(128,4))
-        self.encoder.add(create_layer_with_batch_norm_and_relu(256,4))
-        self.encoder.add(create_layer_with_batch_norm_and_relu(512,4))
-        self.encoder.add(create_layer_with_batch_norm_and_relu(512,4))
-        self.encoder.add(create_layer_with_batch_norm_and_relu(512,4))
-        self.encoder.add(create_layer_with_batch_norm_and_relu(512,4))
-        self.encoder.add(create_layer_with_batch_norm_and_relu(512,4))
-        self.decoder = tf.keras.Sequential()
-        self.decoder.add(create_layer_with_batch_norm_and_relu(512,4,dropout=True,downsample=False))
-        self.decoder.add(create_layer_with_batch_norm_and_relu(512,4,dropout=True,downsample=False))
-        self.decoder.add(create_layer_with_batch_norm_and_relu(512,4,dropout=True,downsample=False))
-        self.decoder.add(create_layer_with_batch_norm_and_relu(256,4,downsample=False))
-        self.decoder.add(create_layer_with_batch_norm_and_relu(128,4,downsample=False))
-        self.decoder.add(create_layer_with_batch_norm_and_relu(64,4,downsample=False))
+        self.generator = []
 
-        self.generator = tf.keras.Sequential()
-        self.generator.add(self.encoder)
-        self.generator.add(self.decoder)
-        self.generator.add(tf.keras.layers.Conv2D(num_output_channels,4,strides=2,padding='same'))
-        self.generator.add(tf.keras.layers.Activation('tanh'))
+        encoder = []
+        encoder.append(create_layer_with_batch_norm_and_relu(64,4,batch_norm=False,dropout=False))
+        encoder.append(create_layer_with_batch_norm_and_relu(128,4))
+        encoder.append(create_layer_with_batch_norm_and_relu(256,4))
+        encoder.append(create_layer_with_batch_norm_and_relu(512,4))
+        encoder.append(create_layer_with_batch_norm_and_relu(512,4))
+        encoder.append(create_layer_with_batch_norm_and_relu(512,4))
+        encoder.append(create_layer_with_batch_norm_and_relu(512,4))
+        encoder.append(create_layer_with_batch_norm_and_relu(512,4))
+        decoder = []
+        decoder.append(create_layer_with_batch_norm_and_relu(256,4,dropout=True,downsample=False))
+        decoder.append(create_layer_with_batch_norm_and_relu(512,4,dropout=True,downsample=False))
+        decoder.append(create_layer_with_batch_norm_and_relu(512,4,dropout=True,downsample=False))
+        decoder.append(create_layer_with_batch_norm_and_relu(512,4,downsample=False))
+        decoder.append(create_layer_with_batch_norm_and_relu(512,4,downsample=False))
+        decoder.append(create_layer_with_batch_norm_and_relu(256,4,downsample=False))
+        decoder.append(create_layer_with_batch_norm_and_relu(128,4,downsample=False))
+        decoder.append(create_layer_with_batch_norm_and_relu(64,4,downsample=False))
 
-        self.discriminator = tf.keras.Sequential()
-        self.discriminator.add(create_layer_with_batch_norm_and_relu(64,4,batch_norm=False))
-        self.discriminator.add(create_layer_with_batch_norm_and_relu(128,4,batch_norm=False))
-        self.discriminator.add(create_layer_with_batch_norm_and_relu(256,4,batch_norm=False))
-        self.discriminator.add(create_layer_with_batch_norm_and_relu(512,4,batch_norm=False))
-        self.discriminator.add(create_layer_with_batch_norm_and_relu(1,4,batch_norm=False))
-        self.discriminator.add(tf.keras.layers.Activation('sigmoid'))
+        generator.append(encoder)
+        generator.append(decoder)
+        generator.append(tf.keras.layers.Conv2D(num_output_channels,4,strides=2,padding='same'))
+        generator.append(tf.keras.layers.Activation('tanh'))
+
+
+        self.discriminator = tf.Sequential.keras()
+        discriminator.add(create_layer_with_batch_norm_and_relu(64,4,batch_norm=False))
+        discriminator.add(create_layer_with_batch_norm_and_relu(128,4,batch_norm=False))
+        discriminator.add(create_layer_with_batch_norm_and_relu(256,4,batch_norm=False))
+        discriminator.add(create_layer_with_batch_norm_and_relu(512,4,batch_norm=False))
+        discriminator.add(create_layer_with_batch_norm_and_relu(1,4,batch_norm=False))
+        discriminator.add(tf.keras.layers.Activation('sigmoid'))
 
     def call(self,original_images,real_transformed_images):
-        gen_transformed_images = self.generator(original_images)
-        prob_real_given_real = self.discriminator(original_images,transformed_images)
-        prob_gen_given_gen = self.discriminator(original_images,gen_transformed_images)
+        # call the generator
+        encoder = self.generator[0]
+        decoder = self.generator[1]
+        final_conv = self.generator[2]
+        final_tanh = self.generator[3]
+
+        encoder_outputs = [] # will ignore the last encoder_output
+        curr_output = original_images
+        for i,encoder_layer in enumerate(encoder):
+            curr_output = encoder_layer(curr_output)
+            encoder_outputs.append(curr_output)
+
+        for i,decoder_layer in enumerate(decoder):
+            decoder_output = decoder_layer(curr_output)
+            curr_output = tf.nn.Concatenate()([decoder_output,encoder_outputs[i]])
+
+        prob_real_given_real = self.discriminator(tf.nn.Concatenate()([original_images,curr_output])) # check what concatenating them like this does
+        prob_gen_given_gen = self.discriminator(tf.nn.Concatenate()([original_images,real_transformed_images]))
+
         return gen_transformed_images,prob_real_given_real,prob_gen_given_gen
 
     def loss(self):
