@@ -23,6 +23,20 @@ def load_data(image_path):
 
     return input_image, target_image
 
+def get_path(image_path):
+    dataset_name = "facades"
+    _URL = f'http://efrosgans.eecs.berkeley.edu/pix2pix/datasets/{dataset_name}.tar.gz'
+
+    path_to_zip = tf.keras.utils.get_file(
+        fname=f"{dataset_name}.tar.gz",
+        origin=_URL,
+        extract=True)
+
+    path_to_zip  = pathlib.Path(path_to_zip)
+    PATH = path_to_zip.parent/dataset_name\
+    
+    return PATH
+
 def resize(images, height, width):
     '''images: tuple containing input image and target image.
        height: resize heights
@@ -70,4 +84,21 @@ def load_process_test_data(image_path):
 
     return input, target
     
+def get_data(image_path):
+    PATH = get_path(image_path)
+    
+    train = tf.data.Dataset.list_files(str(PATH / 'train/*.jpg'))
+    train = train.map(load_process_train_data,
+                                  num_parallel_calls=tf.data.AUTOTUNE)
+    train = train.shuffle(400)
+    train = train.batch(1)
+
+    try:
+        test = tf.data.Dataset.list_files(str(PATH / 'test/*.jpg'))
+    except tf.errors.InvalidArgumentError:
+        test = tf.data.Dataset.list_files(str(PATH / 'val/*.jpg'))
+    test = test.map(load_process_test_data)
+    test = test.batch(1)
+
+    return train, test
 
