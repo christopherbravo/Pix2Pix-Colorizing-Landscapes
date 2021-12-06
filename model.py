@@ -4,7 +4,7 @@ class Model(tf.keras.Model):
     def __init__(self,num_output_channels):
         batch_size = 1
         optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002,beta_1=0.5,beta_2=0.999)
-        lambda = .01 # regularization
+        lambda = 0 # regularization
 
 
         def create_layer_with_batch_norm_and_relu(num_filters,kernel_size,batch_norm=True,dropout=False,downsample=True):
@@ -88,7 +88,8 @@ class Model(tf.keras.Model):
     def loss_func(self,logits_real_given_real,logits_gen_given_gen):
         prob_real_given_real = tf.math.reduce_mean(tf.math.sigmoid(logits_real_given_real))
         prob_gen_given_gen = 1 - tf.math.reduce_mean(tf.math.sigmoid(logits_gen_given_gen))
-        return prob_real_given_real + prob_gen_given_gen
+        regularization = self.lambda * tf.norm(y-generated,ord=1)
+        return prob_real_given_real + prob_gen_given_gen + regularization
 
 
 def train(model,original_images,real_transformed_images):
@@ -100,5 +101,15 @@ def train(model,original_images,real_transformed_images):
         with tf.GradientTape() as tape:
             logits_real_given_real,logits_gen_given_gen = model.call(original_images_batch,real_transformed_images_batch)
             loss = model.loss(logits_real_given_real,logits_gen_given_gen)
-        gradients = tape.gradient(loss,model.trainable_variables)
-        model.optimizer.apply_gradients(zip(gradients,model.trainable_variables))
+
+        discriminator_vars = [model.discriminator]
+        gradients_discriminator = tape.gradient(loss,discriminator_vars)
+        model.optimizer.apply_gradients(zip(gradients_discriminator,discriminator_vars))
+
+        generator_vars = []
+        generator_vars.extend(model.generator[0])
+        generator_vars.extend(model.generator[1])
+        generator_vars.append(model.generator[2])
+        generator_vars.append(model.generator[3])
+        gradients_generator = tape.gradient(-loss,generator_vars)
+        model.optimizer.apply_gradients(zip(gradients,generator_vars))
