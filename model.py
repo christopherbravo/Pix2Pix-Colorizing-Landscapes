@@ -3,7 +3,7 @@ import tensorflow as tf
 class Model(tf.keras.Model):
     def __init__(self,num_output_channels):
         batch_size = 1
-        optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
+        optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002,beta_1=0.5,beta_2=0.999)
         lambda = .01 # regularization
 
 
@@ -85,12 +85,20 @@ class Model(tf.keras.Model):
 
         return logits_real_given_real,logits_gen_given_gen
 
-    def loss(self,logits_real_given_real,logits_gen_given_gen):
+    def loss_func(self,logits_real_given_real,logits_gen_given_gen):
         prob_real_given_real = tf.math.reduce_mean(tf.math.sigmoid(logits_real_given_real))
         prob_gen_given_gen = 1 - tf.math.reduce_mean(tf.math.sigmoid(logits_gen_given_gen))
         return prob_real_given_real + prob_gen_given_gen
 
 
-def train(model,train_inputs,train_labels):
+def train(model,original_images,real_transformed_images):
     # repeatedly update discriminator then generator (or vice versa?)
     # going to have to multiply by -1 for one of them since one is maximizing and other is minimizing
+    for i in range(0,len(original_images),model.batch_size):
+        original_images_batch = original_images[i:i+model.batch_size]
+        real_transformed_images_batch = real_transformed_images[i:i+model.batch_size]
+        with tf.GradientTape() as tape:
+            logits_real_given_real,logits_gen_given_gen = model.call(original_images_batch,real_transformed_images_batch)
+            loss = model.loss(logits_real_given_real,logits_gen_given_gen)
+        gradients = tape.gradient(loss,model.trainable_variables)
+        model.optimizer.apply_gradients(zip(gradients,model.trainable_variables))
