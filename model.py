@@ -162,7 +162,7 @@ def main():
     real_transformed_images = list(real_transformed_images)
 
     model = Model(3)
-    train(model,original_images[:10],real_transformed_images[:10])
+    train(model,original_images,real_transformed_images)
 
     def generate_images(model, test_input, tar):
       prediction = model.generate(test_input)
