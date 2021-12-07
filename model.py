@@ -8,9 +8,8 @@ class Model(tf.keras.Model):
     def __init__(self,num_output_channels):
         super().__init__()
         self.batch_size = 1
-        optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002,beta_1=0.5,beta_2=0.999)
-        lambda_param = 0 # regularization
-
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002,beta_1=0.5,beta_2=0.999)
+        self.lambda_param = 0 # regularization
 
         def create_layer_with_batch_norm_and_relu(num_filters,kernel_size,batch_norm=True,dropout=False,downsample=True,input_shape=None):
             layer = tf.keras.Sequential()
@@ -63,7 +62,7 @@ class Model(tf.keras.Model):
 
         self.generator.append(encoder)
         self.generator.append(decoder)
-        self.generator.append(tf.keras.layers.Conv2D(num_output_channels,4,strides=2,padding='same'))
+        self.generator.append(tf.keras.layers.Conv2DTranspose(num_output_channels,4,strides=2,padding='same'))
         self.generator.append(tf.keras.layers.Activation('tanh'))
 
 
@@ -82,9 +81,6 @@ class Model(tf.keras.Model):
         final_conv = self.generator[2]
         final_tanh = self.generator[3]
 
-        # print(original_images[0].shape)
-        # exit()
-
         encoder_outputs = [] # will ignore the last encoder_output
         curr_output = original_images
 
@@ -100,7 +96,6 @@ class Model(tf.keras.Model):
 
         curr_output = final_conv(curr_output)
         curr_output = final_tanh(curr_output)
-        print(curr_output.shape)
 
         original_and_real_transformed = tf.keras.layers.Concatenate()([original_images[0],real_transformed_images[0]])
         logits_real_given_real = self.discriminator(original_and_real_transformed) # check what concatenating them like this does
@@ -109,34 +104,47 @@ class Model(tf.keras.Model):
 
         return logits_real_given_real,logits_gen_given_gen,curr_output
 
-    def loss_func(self,logits_real_given_real,logits_gen_given_gen,y,generated):
+    def discriminator_loss(self,logits_real_given_real,logits_gen_given_gen):
         prob_real_given_real = tf.math.reduce_mean(tf.math.sigmoid(logits_real_given_real))
         prob_gen_given_gen = 1 - tf.math.reduce_mean(tf.math.sigmoid(logits_gen_given_gen))
+        # regularization = self.lambda_param * tf.norm(y - generated,ord=1) # idk if this will work with batch_size > 1
+        return -1 * (prob_real_given_real + prob_gen_given_gen)
+
+    def generator_loss(self,logits_gen_given_gen,y,generated):
+        # prob_real_given_real = tf.math.reduce_mean(tf.math.sigmoid(logits_real_given_real))
+        prob_gen_given_gen = 1 - tf.math.reduce_mean(tf.math.sigmoid(logits_gen_given_gen))
         regularization = self.lambda_param * tf.norm(y - generated,ord=1) # idk if this will work with batch_size > 1
-        return prob_real_given_real + prob_gen_given_gen + regularization
+        return prob_gen_given_gen + regularization
 
 
 def train(model,original_images,real_transformed_images):
     # repeatedly update discriminator then generator (or vice versa?)
     # going to have to multiply by -1 for one of them since one is maximizing and other is minimizing
+    print(len(original_images))
     for i in range(0,len(original_images),model.batch_size):
+        print(i)
         original_images_batch = original_images[i:i+model.batch_size]
         real_transformed_images_batch = real_transformed_images[i:i+model.batch_size]
-        with tf.GradientTape() as tape:
+        with tf.GradientTape() as discriminator_tape,tf.GradientTape() as generator_tape:
             logits_real_given_real,logits_gen_given_gen,generated = model.call(original_images_batch,real_transformed_images_batch)
-            loss = model.loss(logits_real_given_real,logits_gen_given_gen,real_transformed_images_batch,generated)
+            disc_loss = model.discriminator_loss(logits_real_given_real,logits_gen_given_gen)
+            gen_loss = model.generator_loss(logits_gen_given_gen,real_transformed_images_batch,generated)
 
-        discriminator_vars = [model.discriminator]
-        gradients_discriminator = tape.gradient(loss,discriminator_vars)
-        model.optimizer.apply_gradients(zip(gradients_discriminator,discriminator_vars))
 
+        encoder_vars = [sequential.trainable_variables for sequential in model.generator[0]]
+        encoder_vars = [var for sequential in encoder_vars for var in sequential]
+        decoder_vars = [sequential.trainable_variables for sequential in model.generator[1]]
+        decoder_vars = [var for sequential in decoder_vars for var in sequential]
         generator_vars = []
-        generator_vars.extend(model.generator[0])
-        generator_vars.extend(model.generator[1])
-        generator_vars.append(model.generator[2])
-        generator_vars.append(model.generator[3])
-        gradients_generator = tape.gradient(-loss,generator_vars)
-        model.optimizer.apply_gradients(zip(gradients,generator_vars))
+        generator_vars.extend(encoder_vars)
+        generator_vars.extend(decoder_vars)
+        generator_vars.extend(model.generator[2].trainable_variables)
+        generator_vars.extend(model.generator[3].trainable_variables)
+        gradients_generator = generator_tape.gradient(gen_loss,generator_vars)
+        model.optimizer.apply_gradients(zip(gradients_generator,generator_vars))
+
+        gradients_discriminator = discriminator_tape.gradient(disc_loss,model.discriminator.trainable_variables)
+        model.optimizer.apply_gradients(zip(gradients_discriminator,model.discriminator.trainable_variables))
 
 
 def main():
