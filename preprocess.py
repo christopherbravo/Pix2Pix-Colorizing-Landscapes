@@ -14,7 +14,7 @@ def load_data(image_path):
 
     path_to_zip  = pathlib.Path(path_to_zip)
     PATH = path_to_zip.parent/dataset_name\
-    
+
     image = tf.io.decode_jpeg(tf.io.read_file(image_path))
     split = int(tf.shape(image)[1]/2)
 
@@ -34,7 +34,7 @@ def get_path(image_path):
 
     path_to_zip  = pathlib.Path(path_to_zip)
     PATH = path_to_zip.parent/dataset_name\
-    
+
     return PATH
 
 def resize(images, height, width):
@@ -50,7 +50,8 @@ def resize(images, height, width):
 def random_crop(images, height, width):
     '''images: tuple containing input image and target image.'''
 
-    cropped = tf.image.random_crop(tf.stack([images], axis=0), size=[2, height, width, 3])
+    cropped = tf.image.random_crop(tf.stack([images[0],images[1]], axis=0), size=[2, height, width, 3])
+
     return cropped[0], cropped[1]
 
 def normalize_images(images):
@@ -67,14 +68,14 @@ def random_jitter(images):
     if random>0.5:
         input_image = tf.image.flip_left_right(input_image)
         target_image = tf.image.flip_left_right(target_image)
-    
+
     return input_image, target_image
 
 def load_process_train_data(image_path):
     input, target = load_data(image_path)
     input, target = random_jitter((input, target))
     input, target = normalize_images((input, target))
-    
+
     return input, target
 
 def load_process_test_data(image_path):
@@ -83,10 +84,10 @@ def load_process_test_data(image_path):
     input, target = normalize_images((input, target))
 
     return input, target
-    
+
 def get_data(image_path):
     PATH = get_path(image_path)
-    
+
     train = tf.data.Dataset.list_files(str(PATH / 'train/*.jpg'))
     train = train.map(load_process_train_data,
                                   num_parallel_calls=tf.data.AUTOTUNE)
@@ -101,4 +102,3 @@ def get_data(image_path):
     test = test.batch(1)
 
     return train, test
-
