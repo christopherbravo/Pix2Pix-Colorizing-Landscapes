@@ -10,7 +10,7 @@ class Model(tf.keras.Model):
         super().__init__()
         self.batch_size = 1
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002,beta_1=0.5,beta_2=0.999)
-        self.lambda_param = 0 # regularization
+        self.lambda_param = 10000 # regularization
 
         def create_layer_with_batch_norm_and_relu(num_filters,kernel_size,batch_norm=True,dropout=False,downsample=True,input_shape=None):
             layer = tf.keras.Sequential()
@@ -113,16 +113,15 @@ class Model(tf.keras.Model):
         return logits_real_given_real,logits_gen_given_gen,curr_output
 
     def discriminator_loss(self,logits_real_given_real,logits_gen_given_gen):
-        prob_real_given_real = tf.math.reduce_mean(tf.math.sigmoid(logits_real_given_real))
-        prob_gen_given_gen = 1 - tf.math.reduce_mean(tf.math.sigmoid(logits_gen_given_gen))
-        # regularization = self.lambda_param * tf.norm(y - generated,ord=1) # idk if this will work with batch_size > 1
-        return -1 * (prob_real_given_real + prob_gen_given_gen)
+        log_prob_real_given_real = tf.math.reduce_mean(tf.math.log(tf.math.sigmoid(logits_real_given_real)))
+        log_prob_gen_given_gen = 1 - tf.math.reduce_mean(tf.math.log(tf.math.sigmoid(logits_gen_given_gen)))
+        return -1 * (log_prob_real_given_real + log_prob_gen_given_gen)
 
     def generator_loss(self,logits_gen_given_gen,y,generated):
-        # prob_real_given_real = tf.math.reduce_mean(tf.math.sigmoid(logits_real_given_real))
-        prob_gen_given_gen = 1 - tf.math.reduce_mean(tf.math.sigmoid(logits_gen_given_gen))
+        log_prob_gen_given_gen = 1 - tf.math.reduce_mean(tf.math.log(tf.math.sigmoid(logits_gen_given_gen)))
         regularization = self.lambda_param * tf.norm(y - generated,ord=1) # idk if this will work with batch_size > 1
-        return prob_gen_given_gen + regularization
+        return regularization
+        return log_prob_gen_given_gen + regularization
 
 
 def train(model,original_images,real_transformed_images):
