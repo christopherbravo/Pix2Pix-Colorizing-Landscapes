@@ -10,7 +10,7 @@ class Model(tf.keras.Model):
         super().__init__()
         self.batch_size = 1
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002,beta_1=0.5,beta_2=0.999)
-        self.lambda_param = 10000 # regularization
+        self.lambda_param = 10 # regularization
 
         def create_layer_with_batch_norm_and_relu(num_filters,kernel_size,batch_norm=True,dropout=False,downsample=True,input_shape=None):
             layer = tf.keras.Sequential()
@@ -73,7 +73,7 @@ class Model(tf.keras.Model):
         self.discriminator.add(create_layer_with_batch_norm_and_relu(256,4,batch_norm=False))
         self.discriminator.add(create_layer_with_batch_norm_and_relu(512,4,batch_norm=False))
         self.discriminator.add(create_layer_with_batch_norm_and_relu(1,4,batch_norm=False))
-        self.discriminator.add(tf.keras.layers.Activation('sigmoid'))
+        # self.discriminator.add(tf.keras.layers.Activation('sigmoid'))
 
     def generate(self,original_images):
         encoder = self.generator[0]
@@ -108,20 +108,34 @@ class Model(tf.keras.Model):
         original_and_real_transformed = tf.keras.layers.Concatenate()([original_images[0],real_transformed_images[0]])
         logits_real_given_real = self.discriminator(original_and_real_transformed) # check what concatenating them like this does
         original_and_generated_transformed = tf.keras.layers.Concatenate()([original_images[0],curr_output])
-        logits_gen_given_gen = self.discriminator(original_and_generated_transformed)
+        logits_real_given_gen = self.discriminator(original_and_generated_transformed)
 
-        return logits_real_given_real,logits_gen_given_gen,curr_output
+        return logits_real_given_real,logits_real_given_gen,curr_output
 
     def discriminator_loss(self,logits_real_given_real,logits_gen_given_gen):
-        log_prob_real_given_real = tf.math.reduce_mean(tf.math.log(tf.math.sigmoid(logits_real_given_real)))
-        log_prob_gen_given_gen = 1 - tf.math.reduce_mean(tf.math.log(tf.math.sigmoid(logits_gen_given_gen)))
-        return -1 * (log_prob_real_given_real + log_prob_gen_given_gen)
+        # log_prob_real_given_real = tf.math.reduce_mean(tf.math.log(tf.math.sigmoid(logits_real_given_real)))
+        # probs_gen_given_gen = tf.math.sigmoid(logits_gen_given_gen)
+        # log_prob_gen_given_gen = tf.math.reduce_mean(tf.math.log(1 - probs_gen_given_gen))
+        # return -1 * (log_prob_real_given_real + log_prob_gen_given_gen) / 2
+        loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+        real_loss = loss_object(tf.ones_like(logits_real_given_real), logits_real_given_real)
+        generated_loss = loss_object(tf.zeros_like(logits_gen_given_gen), logits_gen_given_gen)
+        total_disc_loss = real_loss + generated_loss
+        return total_disc_loss
 
-    def generator_loss(self,logits_gen_given_gen,y,generated):
-        log_prob_gen_given_gen = 1 - tf.math.reduce_mean(tf.math.log(tf.math.sigmoid(logits_gen_given_gen)))
-        regularization = self.lambda_param * tf.norm(y - generated,ord=1) # idk if this will work with batch_size > 1
-        return regularization
-        return log_prob_gen_given_gen + regularization
+    def generator_loss(self,logits_real_given_gen,y,generated):
+        # probs_real_given_gen = tf.math.sigmoid(logits_real_given_gen)
+        # log_prob_gen_given_gen = tf.math.reduce_mean(tf.math.log(1 - probs_real_given_gen))
+        # # tf tutorial uses l1_loss = tf.reduce_mean(tf.abs(target - gen_output)) instead of tf.norm(y - generated,ord=1)
+        # regularization = self.lambda_param * tf.norm(y - generated,ord=1) # idk if this will work with batch_size > 1
+        # return log_prob_gen_given_gen + regularization
+
+        # from tf tutorial
+        loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=True)
+        gan_loss = loss_object(tf.ones_like(logits_real_given_gen), logits_real_given_gen)
+        l1_loss = tf.reduce_mean(tf.abs(y - generated))
+        total_gen_loss = gan_loss + (self.lambda_param * l1_loss)
+        return total_gen_loss
 
 
 def train(model,original_images,real_transformed_images):
@@ -156,7 +170,7 @@ def train(model,original_images,real_transformed_images):
 
 def main():
     train_data,test_data = get_data('./data/facades/')
-    original_images,real_transformed_images = zip(*train_data)
+    real_transformed_images,original_images = zip(*train_data)
     original_images = list(original_images)
     real_transformed_images = list(real_transformed_images)
 
@@ -169,7 +183,6 @@ def main():
 
       display_list = [test_input[0], tar[0], prediction[0]]
       title = ['Input Image', 'Ground Truth', 'Predicted Image']
-
       for i in range(3):
         plt.subplot(1, 3, i+1)
         plt.title(title[i])
@@ -178,7 +191,7 @@ def main():
         plt.axis('off')
       plt.show()
 
-    for example_input, example_target in test_data.take(1):
+    for example_target, example_input  in test_data.take(3):
         generate_images(model, example_input, example_target)
 
 
