@@ -1,6 +1,7 @@
 from preprocess import get_data
 import tensorflow as tf
 from matplotlib import pyplot as plt
+import numpy as np
 
 class Generator(tf.keras.Model):
     pass
@@ -10,7 +11,7 @@ class Model(tf.keras.Model):
         super().__init__()
         self.batch_size = 1
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002,beta_1=0.5,beta_2=0.999)
-        self.lambda_param = 10 # regularization
+        self.lambda_param = 100 # regularization
 
         def create_layer_with_batch_norm_and_relu(num_filters,kernel_size,batch_norm=True,dropout=False,downsample=True,input_shape=None):
             layer = tf.keras.Sequential()
@@ -112,18 +113,35 @@ class Model(tf.keras.Model):
 
         return logits_real_given_real,logits_real_given_gen,curr_output
 
-    def discriminator_loss(self,logits_real_given_real,logits_gen_given_gen):
+    def discriminator_loss(self,probs_real_given_real,probs_real_given_gen):
+        # off by negative sign. WHY?
+        log_prob_real_given_real = -1 * tf.math.reduce_mean(tf.math.log(probs_real_given_real))
+        log_prob_gen_given_gen = -1 * tf.math.reduce_mean(tf.math.log(1 - probs_real_given_gen))
+        my_discriminator_loss = (log_prob_real_given_real + log_prob_gen_given_gen)
+
         # log_prob_real_given_real = tf.math.reduce_mean(tf.math.log(tf.math.sigmoid(logits_real_given_real)))
         # probs_gen_given_gen = tf.math.sigmoid(logits_gen_given_gen)
         # log_prob_gen_given_gen = tf.math.reduce_mean(tf.math.log(1 - probs_gen_given_gen))
         # return -1 * (log_prob_real_given_real + log_prob_gen_given_gen) / 2
-        loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=True)
-        real_loss = loss_object(tf.ones_like(logits_real_given_real), logits_real_given_real)
-        generated_loss = loss_object(tf.zeros_like(logits_gen_given_gen), logits_gen_given_gen)
-        total_disc_loss = real_loss + generated_loss
-        return total_disc_loss
 
-    def generator_loss(self,logits_real_given_gen,y,generated):
+        loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=False)
+        real_loss = loss_object(tf.ones_like(probs_real_given_real), probs_real_given_real)
+        generated_loss = loss_object(tf.zeros_like(probs_real_given_gen), probs_real_given_gen)
+        total_disc_loss = real_loss + generated_loss
+        print('DISCRIMINATIVE')
+        print(f'real: {log_prob_real_given_real} {real_loss}')
+        print(f'gen: {log_prob_gen_given_gen} {generated_loss}')
+        print(f'discriminator total: {my_discriminator_loss} {total_disc_loss}')
+        return my_discriminator_loss / 2 # need to divide by 2 for training
+
+    def generator_loss(self,probs_real_given_gen,y,generated):
+        log_prob_real_given_gen = -1 * tf.math.reduce_mean(tf.math.log(probs_real_given_gen))
+
+        regularization = self.lambda_param * tf.norm(tf.reshape(y,[-1]) - tf.reshape(generated,[-1]),ord=1)/tf.cast(tf.math.reduce_prod(generated.shape[1:]),tf.float32)
+
+        my_generator_loss = log_prob_real_given_gen + regularization
+        #return my_generator_loss
+
         # probs_real_given_gen = tf.math.sigmoid(logits_real_given_gen)
         # log_prob_gen_given_gen = tf.math.reduce_mean(tf.math.log(1 - probs_real_given_gen))
         # # tf tutorial uses l1_loss = tf.reduce_mean(tf.abs(target - gen_output)) instead of tf.norm(y - generated,ord=1)
@@ -131,11 +149,16 @@ class Model(tf.keras.Model):
         # return log_prob_gen_given_gen + regularization
 
         # from tf tutorial
-        loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=True)
-        gan_loss = loss_object(tf.ones_like(logits_real_given_gen), logits_real_given_gen)
-        l1_loss = tf.reduce_mean(tf.abs(y - generated))
-        total_gen_loss = gan_loss + (self.lambda_param * l1_loss)
-        return total_gen_loss
+        loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=False)
+        gan_loss = loss_object(tf.ones_like(probs_real_given_gen), probs_real_given_gen)
+        l1_loss = self.lambda_param * tf.reduce_mean(tf.abs(y - generated))
+        total_gen_loss = gan_loss + l1_loss
+
+        print('GENERATIVE')
+        print(f'gen: {log_prob_real_given_gen} {gan_loss}')
+        print(f'regularization: {regularization} {l1_loss}')
+        print(f'generative total: {my_generator_loss} {total_gen_loss}')
+        return my_generator_loss
 
 
 def train(model,original_images,real_transformed_images):
@@ -147,9 +170,10 @@ def train(model,original_images,real_transformed_images):
         original_images_batch = original_images[i:i+model.batch_size]
         real_transformed_images_batch = real_transformed_images[i:i+model.batch_size]
         with tf.GradientTape() as discriminator_tape,tf.GradientTape() as generator_tape:
-            logits_real_given_real,logits_gen_given_gen,generated = model.call(original_images_batch,real_transformed_images_batch)
-            disc_loss = model.discriminator_loss(logits_real_given_real,logits_gen_given_gen)
-            gen_loss = model.generator_loss(logits_gen_given_gen,real_transformed_images_batch,generated)
+            probs_real_given_real,probs_real_given_gen,generated = model.call(original_images_batch,real_transformed_images_batch)
+
+            disc_loss = model.discriminator_loss(probs_real_given_real,probs_real_given_gen)
+            gen_loss = model.generator_loss(probs_real_given_gen,real_transformed_images_batch,generated)
 
 
         encoder_vars = [sequential.trainable_variables for sequential in model.generator[0]]
@@ -175,7 +199,7 @@ def main():
     real_transformed_images = list(real_transformed_images)
 
     model = Model(3)
-    train(model,original_images,real_transformed_images)
+    train(model,original_images[:50],real_transformed_images[:50])
 
     def generate_images(model, test_input, tar):
       prediction = model.generate(test_input)
