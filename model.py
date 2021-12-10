@@ -124,14 +124,14 @@ class Model(tf.keras.Model):
         # log_prob_gen_given_gen = tf.math.reduce_mean(tf.math.log(1 - probs_gen_given_gen))
         # return -1 * (log_prob_real_given_real + log_prob_gen_given_gen) / 2
 
-        loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=False)
-        real_loss = loss_object(tf.ones_like(probs_real_given_real), probs_real_given_real)
-        generated_loss = loss_object(tf.zeros_like(probs_real_given_gen), probs_real_given_gen)
-        total_disc_loss = real_loss + generated_loss
-        print('DISCRIMINATIVE')
-        print(f'real: {log_prob_real_given_real} {real_loss}')
-        print(f'gen: {log_prob_gen_given_gen} {generated_loss}')
-        print(f'discriminator total: {my_discriminator_loss} {total_disc_loss}')
+        # loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=False)
+        # real_loss = loss_object(tf.ones_like(probs_real_given_real), probs_real_given_real)
+        # generated_loss = loss_object(tf.zeros_like(probs_real_given_gen), probs_real_given_gen)
+        # total_disc_loss = real_loss + generated_loss
+        # print('DISCRIMINATIVE')
+        # print(f'real: {log_prob_real_given_real} {real_loss}')
+        # print(f'gen: {log_prob_gen_given_gen} {generated_loss}')
+        # print(f'discriminator total: {my_discriminator_loss} {total_disc_loss}')
         return my_discriminator_loss / 2 # need to divide by 2 for training
 
     def generator_loss(self,probs_real_given_gen,y,generated):
@@ -148,16 +148,15 @@ class Model(tf.keras.Model):
         # regularization = self.lambda_param * tf.norm(y - generated,ord=1) # idk if this will work with batch_size > 1
         # return log_prob_gen_given_gen + regularization
 
-        # from tf tutorial
-        loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=False)
-        gan_loss = loss_object(tf.ones_like(probs_real_given_gen), probs_real_given_gen)
-        l1_loss = self.lambda_param * tf.reduce_mean(tf.abs(y - generated))
-        total_gen_loss = gan_loss + l1_loss
-
-        print('GENERATIVE')
-        print(f'gen: {log_prob_real_given_gen} {gan_loss}')
-        print(f'regularization: {regularization} {l1_loss}')
-        print(f'generative total: {my_generator_loss} {total_gen_loss}')
+        # loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=False)
+        # gan_loss = loss_object(tf.ones_like(probs_real_given_gen), probs_real_given_gen)
+        # l1_loss = self.lambda_param * tf.reduce_mean(tf.abs(y - generated))
+        # total_gen_loss = gan_loss + l1_loss
+        #
+        # print('GENERATIVE')
+        # print(f'gen: {log_prob_real_given_gen} {gan_loss}')
+        # print(f'regularization: {regularization} {l1_loss}')
+        # print(f'generative total: {my_generator_loss} {total_gen_loss}')
         return my_generator_loss
 
 
